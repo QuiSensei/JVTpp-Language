@@ -22,5 +22,4 @@
 %token <str> STRING_LATERAL
 %token <str> CHARACTER
 %token <str> IDENTIFIER
-%token
-%token
+
