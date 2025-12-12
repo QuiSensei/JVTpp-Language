@@ -1,0 +1,21 @@
+develop[
+    set x = 10;
+    set y = 20;
+    set message = "Value of x is %d";
+
+    x = x + 5;
+    y = y * 2;
+
+    show("Hello World");
+    show("The value of x is %d", x);
+    show("x: %d   y: %d", x, y);
+    show("Sum of x + y = %d", x + y);
+
+    show(message, x);
+
+    show('A');
+    show("Single char: %c", 'Z');
+
+    5 + 10;      // Expression statement allowed
+    x / 2;       // Also valid
+]finish
