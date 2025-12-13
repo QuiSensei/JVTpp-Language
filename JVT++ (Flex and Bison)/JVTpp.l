@@ -18,6 +18,9 @@
 develop         { return develop; }
 show            { return show; }
 finish          { return finish; }
+set             { return set; }
+NUMERAL         { return NUMERAL; }     // Type keyword for numbers
+ALPHA           { return ALPHA; }       // Type keyword for strings
 
 "+"             { return PLUS;}
 "-"             { return MINUS; }
@@ -34,12 +37,12 @@ finish          { return finish; }
 
 [0-9]+ { 
     yylval.num = atoi(yytext);
-    return NUMERAL;          // integer type
+    return INTEGER;          // integer type
 }
 
 \"([^\\\"]|\\.)*\" {
     yylval.str = strdup(yytext);
-    return ALPHA;
+    return STRING;
 }
 
 \'([^'\\]|\\.)\'  {
