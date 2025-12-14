@@ -103,6 +103,70 @@ char *get_symbol_string(char *name) {
     return NULL;
 }
 
+int get_symbol_value_or_zero(char *name) {
+    int idx = lookup_symbol(name);
+    if(idx != -1) {
+        if(!symbol_table[idx].is_string) {
+            return symbol_table[idx].value;
+        }
+        return (int)(long)symbol_table[idx].str_value;
+    } else {
+        fprintf(stderr, "Error: Undefined variable '%s'\n", name);
+        exit(1);
+    }
+    return 0;
+}
+
+int check_format_type(char *format_str, char *var_name) {
+    int idx = lookup_symbol(var_name);
+    if (idx == -1) {
+        fprintf(stderr, "Error: Undefined variable '%s'\n", var_name);
+        return 0;
+    }
+    
+    // Check if format contains %s
+    int has_string_format = (strstr(format_str, "%s") != NULL);
+    // Check if format contains %d, %i, or other integer formats
+    int has_int_format = (strstr(format_str, "%d") != NULL || strstr(format_str, "%i") != NULL);
+    
+    int is_string_var = symbol_table[idx].is_string;
+    
+    // Type mismatch detection
+    if (is_string_var && has_int_format) {
+        fprintf(stderr, "\nError: Type mismatch - cannot use string variable '%s' with integer format specifier (%%d, %%i)\n", var_name);
+        return 0;
+    }
+    
+    if (!is_string_var && has_string_format) {
+        fprintf(stderr, "\nError: Type mismatch - cannot use integer variable '%s' with string format specifier (%%s)\n", var_name);
+        return 0;
+    }
+    
+    return 1;
+}
+
+void safe_printf_one_arg(char *format, char *var_name) {
+    char *clean_fmt = strip_quotes(format);
+    
+    if (!check_format_type(clean_fmt, var_name)) {
+        free(clean_fmt);
+        clean_fmt = NULL;
+        exit(1);
+    }
+    
+    int idx = lookup_symbol(var_name);
+    if (symbol_table[idx].is_string) {
+        printf(clean_fmt, symbol_table[idx].str_value);
+    } else {
+        printf(clean_fmt, symbol_table[idx].value);
+    }
+    
+    free(clean_fmt);
+    clean_fmt = NULL;
+}
+
+char *current_format_string = NULL;
+
 /* ----- printing Functions ----- */
 void print_fstring(char *format_str) {
     char *str = strip_quotes(format_str);

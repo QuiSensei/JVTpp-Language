@@ -70,7 +70,7 @@ typedef union YYSTYPE
 {
 
 /* Line 1676 of yacc.c  */
-#line 16 "JVTpp.y"
+#line 19 "JVTpp.y"
 
     int num;
     char *str;

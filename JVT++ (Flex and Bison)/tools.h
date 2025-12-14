@@ -28,6 +28,9 @@ void add_symbol(char *name, int value);
 void add_string_symbol(char *name, char *value);
 int get_symbol_value(char *name);
 char *get_symbol_string(char *name);
+int get_symbol_value_or_zero(char *name);
+int check_format_type(char *format_str, char *var_name);
+void safe_printf_one_arg(char *format, char *var_name);
 
 /* ----- printing Functions ----- */
 void print_fstring(char *format_str);

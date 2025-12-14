@@ -7,10 +7,13 @@
     extern int yylex();
     extern void yyerror(const char *s);
     extern int yylineno;
+    extern char *current_format_string;
     extern FILE *yyin;
 
-    int lineCount = 1, cntr = 0;
+    int lineCount = 1, cntr = 2;
 %}
+
+%error-verbose
 
 //
 %union {
@@ -35,11 +38,31 @@
 %right ASSIGN
 
 %type <num> expression term factor
-%type <str> data_type print_argument
+%type <str> data_type
 
 // JVT++ CFG
 %%
 program:        develop L_BRACKET statements R_BRACKET finish
+                | error L_BRACKET statements R_BRACKET finish
+                {
+                    yyerror("Missing or misspelled 'develop' keyword");
+                    yyerrok;
+                }
+                | develop error statements R_BRACKET finish
+                {
+                    yyerror("Missing '[' after 'develop'");
+                    yyerrok;
+                }
+                | develop L_BRACKET statements error finish
+                {
+                    yyerror("Missing ']' before 'finish'");
+                    yyerrok;
+                }       
+                | develop L_BRACKET statements R_BRACKET error
+                {
+                    yyerror("Missing or misspelled 'finish' keyword");
+                    yyerrok;
+                }
                 ;
 
 statements:     statements statement
@@ -47,9 +70,29 @@ statements:     statements statement
                 ;
 
 statement:      declaration SEMICOLON
+                | declaration error
+                {
+                    yyerror("expected ';' after declaration");
+                    yyerrok;
+                }
                 | assignment SEMICOLON
+                | assignment error
+                {
+                    yyerror("expected ';' after assignment");
+                    yyerrok;
+                }
                 | print SEMICOLON
+                | print error
+                {
+                    yyerror("expected ';' after show");
+                    yyerrok;
+                }
                 | println SEMICOLON
+                | println error
+                {
+                    yyerror("expected ';' after show");
+                    yyerrok;
+                }
                 ;
             
 declaration:    data_type IDENTIFIER
@@ -76,7 +119,6 @@ declaration:    data_type IDENTIFIER
                     free($1);
                     free($2);
                     free($4);
-                    clean = NULL;
                 }
                 ;
 
@@ -98,7 +140,6 @@ assignment:     IDENTIFIER ASSIGN expression
                     free(clean);
                     free($1);
                     free($3);
-                    clean = NULL;
                 }
                 ;
 
@@ -140,21 +181,6 @@ print:          show L_PARENTESIS IDENTIFIER R_PARENTESIS
                     printf(remove_q, $5);
                     free(remove_q);
                     free($3);
-                }
-                | show L_PARENTESIS STRING COMMA print_argument R_PARENTESIS
-                {
-                    char *text = strip_quotes($3);
-                    int idx = lookup_symbol($5);
-
-                    if(idx == -1 || !symbol_table[idx].is_string) {
-                        yyerror("Type mismatch or undefined variable");
-                    } else {
-                        printf(text, symbol_table[idx].str_value);
-                    }
-                    free(text);
-                    free($3);
-                    free($5);
-                    text = NULL;
                 }
                 | show L_PARENTESIS STRING COMMA expression COMMA expression R_PARENTESIS 
                 {
@@ -224,31 +250,19 @@ println:        showln L_PARENTESIS IDENTIFIER R_PARENTESIS
                 | showln L_PARENTESIS STRING COMMA expression R_PARENTESIS 
                 {
                     char *remove_q = strip_quotes($3);
+                    current_format_string = remove_q;  // Set context
                     printf(remove_q, $5);
+                    current_format_string = NULL;  // Clear context
                     printf("\n");
                     free(remove_q);
                     free($3);
                 }
-                | showln L_PARENTESIS STRING COMMA print_argument R_PARENTESIS
-                {
-                    char *text = strip_quotes($3);
-                    int idx = lookup_symbol($5);
-
-                    if(idx == -1 || !symbol_table[idx].is_string) {
-                        yyerror("Type mismatch or undefined variable");
-                    } else {
-                        printf(text, symbol_table[idx].str_value);
-                        printf("\n");
-                    }
-                    free(text);
-                    free($3);
-                    free($5);
-                    text = NULL;
-                }
                 | showln L_PARENTESIS STRING COMMA expression COMMA expression R_PARENTESIS 
                 {
                     char *remove_q = strip_quotes($3);
+                    current_format_string = remove_q;  // Set context
                     printf(remove_q, $5, $7);
+                    current_format_string = NULL;  // Clear context
                     printf("\n");
                     free(remove_q);
                     free($3);
@@ -256,7 +270,9 @@ println:        showln L_PARENTESIS IDENTIFIER R_PARENTESIS
                 | showln L_PARENTESIS STRING COMMA expression COMMA expression COMMA expression R_PARENTESIS 
                 {
                     char *remove_q = strip_quotes($3);
+                    current_format_string = remove_q;  // Set context
                     printf(remove_q, $5, $7, $9);
+                    current_format_string = NULL;  // Clear context
                     printf("\n");
                     free(remove_q);
                     free($3);
@@ -264,7 +280,9 @@ println:        showln L_PARENTESIS IDENTIFIER R_PARENTESIS
                 | showln L_PARENTESIS STRING COMMA expression COMMA expression COMMA expression COMMA expression R_PARENTESIS 
                 {
                     char *remove_q = strip_quotes($3);
+                    current_format_string = remove_q;  // Set context
                     printf(remove_q, $5, $7, $9, $11);
+                    current_format_string = NULL;  // Clear context
                     printf("\n");
                     free(remove_q);
                     free($3);
@@ -282,29 +300,6 @@ println:        showln L_PARENTESIS IDENTIFIER R_PARENTESIS
                 }
                 ;
 
-print_argument: expression
-                {
-                    char buff[64];
-                    sprintf(buff, "%d", $1);
-                    $$ = strdup(buff);
-                }
-                | IDENTIFIER
-                {
-                    int idx = lookup_symbol($1);
-                    if (idx == -1) {
-                        yyerror("Undefined variable");
-                        $$ = strdup("");
-                    } else if (symbol_table[idx].is_string) {
-                        $$ = strdup(symbol_table[idx].str_value);
-                    } else {
-                        char buf[64];
-                        sprintf(buf, "%d", symbol_table[idx].value);
-                        $$ = strdup(buf);
-                    }
-                    free($1);
-                }
-                ;
-
 expression:     expression PLUS term
                 { $$ = $1 + $3; }
                 | expression MINUS term
@@ -319,8 +314,8 @@ term:           term MULTIPLICATION factor
                 {
                     if (division_check($1, $3) == -1) {
                         yyerror("Can't divide by 0");
-                        exit(1);
                         $$ = 0;
+                        exit(1);
                     } else {
                         $$ = $1 / $3;
                     }
@@ -331,7 +326,14 @@ term:           term MULTIPLICATION factor
 
 factor:         IDENTIFIER
                 { 
-                    $$ = get_symbol_value($1);  
+                    // Check if it's a string variable being used in expression context
+                    int idx = lookup_symbol($1);
+                    if (idx != -1 && symbol_table[idx].is_string) {
+                        // String in arithmetic expression - cast pointer for printf
+                        $$ = (int)(long)symbol_table[idx].str_value;
+                    } else {
+                        $$ = get_symbol_value($1);
+                    }
                     free($1);
                 }
                 | INTEGER
@@ -342,7 +344,10 @@ factor:         IDENTIFIER
 %%
 
 void yyerror(const char *s) {
-    fprintf(stderr, "\nError: Line %d <%s>\n", yylineno, s);
+    // Suppress the automatic error
+    if (strcmp(s, "syntax error") == 0 || strstr(s, "syntax error") != NULL) return;
+    fprintf(stderr, "Error: Line %d %s\n", yylineno, s);
+    exit(1);
 }
 
 int main(int argc, char **argv) 
