@@ -7,7 +7,6 @@
     extern int yylex();
     extern void yyerror(const char *s);
     extern int yylineno;
-    extern char *current_format_string;
     extern FILE *yyin;
 
     int lineCount = 1, cntr = 2;
@@ -15,7 +14,6 @@
 
 %error-verbose
 
-//
 %union {
     int num;
     char *str;
@@ -43,26 +41,6 @@
 // JVT++ CFG
 %%
 program:        develop L_BRACKET statements R_BRACKET finish
-                | error L_BRACKET statements R_BRACKET finish
-                {
-                    yyerror("Missing or misspelled 'develop' keyword");
-                    yyerrok;
-                }
-                | develop error statements R_BRACKET finish
-                {
-                    yyerror("Missing '[' after 'develop'");
-                    yyerrok;
-                }
-                | develop L_BRACKET statements error finish
-                {
-                    yyerror("Missing ']' before 'finish'");
-                    yyerrok;
-                }       
-                | develop L_BRACKET statements R_BRACKET error
-                {
-                    yyerror("Missing or misspelled 'finish' keyword");
-                    yyerrok;
-                }
                 ;
 
 statements:     statements statement
@@ -98,9 +76,9 @@ statement:      declaration SEMICOLON
 declaration:    data_type IDENTIFIER
                 {
                     if (strcmp($1, "int") == 0) {
-                        add_symbol($2, 0);          // default int = 0
+                        add_symbol($2, 0);
                     } else {
-                        add_string_symbol($2, "");  // default string = ""
+                        add_string_symbol($2, "");
                     }
                     free($1);
                     free($2);
@@ -250,9 +228,7 @@ println:        showln L_PARENTESIS IDENTIFIER R_PARENTESIS
                 | showln L_PARENTESIS STRING COMMA expression R_PARENTESIS 
                 {
                     char *remove_q = strip_quotes($3);
-                    current_format_string = remove_q;  // Set context
                     printf(remove_q, $5);
-                    current_format_string = NULL;  // Clear context
                     printf("\n");
                     free(remove_q);
                     free($3);
@@ -260,9 +236,7 @@ println:        showln L_PARENTESIS IDENTIFIER R_PARENTESIS
                 | showln L_PARENTESIS STRING COMMA expression COMMA expression R_PARENTESIS 
                 {
                     char *remove_q = strip_quotes($3);
-                    current_format_string = remove_q;  // Set context
                     printf(remove_q, $5, $7);
-                    current_format_string = NULL;  // Clear context
                     printf("\n");
                     free(remove_q);
                     free($3);
@@ -270,9 +244,7 @@ println:        showln L_PARENTESIS IDENTIFIER R_PARENTESIS
                 | showln L_PARENTESIS STRING COMMA expression COMMA expression COMMA expression R_PARENTESIS 
                 {
                     char *remove_q = strip_quotes($3);
-                    current_format_string = remove_q;  // Set context
                     printf(remove_q, $5, $7, $9);
-                    current_format_string = NULL;  // Clear context
                     printf("\n");
                     free(remove_q);
                     free($3);
@@ -280,9 +252,7 @@ println:        showln L_PARENTESIS IDENTIFIER R_PARENTESIS
                 | showln L_PARENTESIS STRING COMMA expression COMMA expression COMMA expression COMMA expression R_PARENTESIS 
                 {
                     char *remove_q = strip_quotes($3);
-                    current_format_string = remove_q;  // Set context
                     printf(remove_q, $5, $7, $9, $11);
-                    current_format_string = NULL;  // Clear context
                     printf("\n");
                     free(remove_q);
                     free($3);
@@ -326,13 +296,16 @@ term:           term MULTIPLICATION factor
 
 factor:         IDENTIFIER
                 { 
-                    // Check if it's a string variable being used in expression context
                     int idx = lookup_symbol($1);
-                    if (idx != -1 && symbol_table[idx].is_string) {
-                        // String in arithmetic expression - cast pointer for printf
+                    if (idx == -1) {
+                        fprintf(stderr, "Error: Undefined variable '%s'\n", $1);
+                        exit(1);
+                    }
+                    
+                    if (symbol_table[idx].is_string) {
                         $$ = (int)(long)symbol_table[idx].str_value;
                     } else {
-                        $$ = get_symbol_value($1);
+                        $$ = symbol_table[idx].value;
                     }
                     free($1);
                 }
@@ -344,20 +317,49 @@ factor:         IDENTIFIER
 %%
 
 void yyerror(const char *s) {
-    // Suppress the automatic error
     if (strcmp(s, "syntax error") == 0 || strstr(s, "syntax error") != NULL) return;
     fprintf(stderr, "Error: Line %d %s\n", yylineno, s);
     exit(1);
 }
 
-int main(int argc, char **argv) 
-{
+int validate_structure(FILE *file) {
+    int tokens[4];
+    const char *keywords[]= {"develop", "[", "]", "finish"};
+    
+    int found[4] = {0, 0, 0, 0};
+    int token;
+    
+    while ((token = yylex()) != 0) {
+        if (token == develop && !found[0]) found[0] = 1;
+        else if (token == L_BRACKET && found[0] && !found[1]) found[1] = 1;
+        else if (token == R_BRACKET && found[1]) found[2] = 1;
+        else if (token == finish && found[2]) found[3] = 1;
+    }
+    
+    for (int i = 0; i < 4; i++) {
+        if (!found[i]) {
+            fprintf(stderr, "Error: %s should be declared first before running", keywords[i]);
+            return 0;
+        }
+    }
+    return 1;
+}
+
+int main(int argc, char **argv) {
     if (argc > 1) {
         yyin = fopen(argv[1], "r");
         if (!yyin) {
             fprintf(stderr, "Cannot open file: %s\n", argv[1]);
             return 1;
         }
+        
+        if (!validate_structure(yyin)) {
+            fclose(yyin);
+            return 1;
+        }
+        
+        fclose(yyin);
+        yyin = fopen(argv[1], "r");
     }
 
     int result = yyparse();
