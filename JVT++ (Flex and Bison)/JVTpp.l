@@ -13,12 +13,12 @@
 %%
 [ \t]+          ; // Ignore whitespaces and tabs
 \/\/.*          ; // Single-line comments
-\n              { return NEWLINE; }
+\n              ; //{ return NEWLINE; }
 
 develop         { return develop; }
-show            { return show; }
 finish          { return finish; }
-set             { return set; }
+show            { return show; }
+showln          { return showln; }
 NUMERAL         { return NUMERAL; }     // Type keyword for numbers
 ALPHA           { return ALPHA; }       // Type keyword for strings
 

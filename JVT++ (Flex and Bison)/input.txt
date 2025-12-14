@@ -1,22 +1,17 @@
 develop[
-    NUMERAL x = 10;
-    NUMERAL y = 20;
-    
-    ALPHA message = "Value of x is %d";
+    ALPHA name1 = "Phillip Nathanael Quieta";
+    ALPHA name2 = "Charles Jayson jaques";
+    NUMERAL age1 = 20;
+    NUMERAL age2 = 20;
+    ALPHA p;
+    ALPHA s = "";
+    NUMERAL a = 2;
+    NUMERAL mult;
 
-    x = x + 5;
-    y = y * 2;
+    p = "CSC 112";
+    a = a * a;
 
-    show("Hello World");
-    show("The value of x is %d", x);
-    show("x: %d   y: %d", x, y);
-    show("Sum of x + y = %d", x + y);
-
-    show(message, x);
-
-    show('A');
-    show("Single char: %c", 'Z');
-
-    5 + 10;      // Expression statement allowed
-    x / 2;       // Also valid
+    showln("Name: {name1}");
+    showln("subject: %s", p);
+    show("multipy: {a}");
 ]finish

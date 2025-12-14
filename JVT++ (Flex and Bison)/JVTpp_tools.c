@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "tools.h"
 
 /* ----- Global Symbol Table ----- */
@@ -24,7 +25,7 @@ char *strip_quotes(char *s) {
     
     char *res = malloc(len - 1);
     if (res == NULL) {
-        fprintf(stderr, "Memory allocation failed\n");
+        fprintf(stderr, "ERROR: Memory allocation failed\n");
         exit(1);
     }
 
@@ -87,8 +88,10 @@ int get_symbol_value(char *name) {
     int idx = lookup_symbol(name);
     if (idx != -1 && !symbol_table[idx].is_string) {
         return symbol_table[idx].value;
+    } else {
+        fprintf(stderr, "Error: Undefined variable '%s' or type mismatch", name);
+        exit(1); 
     }
-    fprintf(stderr, "Error: Undefined variable '%s' or type mismatch\n", name);
     return 0;
 }
 
@@ -98,4 +101,91 @@ char *get_symbol_string(char *name) {
         return symbol_table[idx].str_value;
     }
     return NULL;
+}
+
+/* ----- printing Functions ----- */
+void print_fstring(char *format_str) {
+    char *str = strip_quotes(format_str);
+    char output[1024] = "";
+    int out_pos = 0;
+    int i = 0;
+    
+    while (str[i] != '\0') {
+        if (str[i] == '{') {
+            i++; // Skip the opening {
+            
+            // Check for empty {} or closing brace
+            if (str[i] == '}') {
+                // Empty braces - just skip
+                i++;
+                continue;
+            }
+            
+            // Extract variable name
+            char var_name[100] = "";
+            int var_pos = 0;
+            while (str[i] != '}' && str[i] != '\0') {
+                var_name[var_pos++] = str[i++];
+            }
+            var_name[var_pos] = '\0';
+            
+            if (str[i] == '}') {
+                i++; // Skip the closing }
+            }
+            
+            // Trim whitespace from variable name
+            int start = 0;
+            while (isspace(var_name[start])) start++;
+            int end = strlen(var_name) - 1;
+            while (end >= start && isspace(var_name[end])) end--;
+            
+            char trimmed[100] = "";
+            int j = 0;
+            for (int k = start; k <= end; k++) {
+                trimmed[j++] = var_name[k];
+            }
+            trimmed[j] = '\0';
+            
+            // Look up the variable
+            int idx = lookup_symbol(trimmed);
+            if (idx != -1) {
+                if (symbol_table[idx].is_string) {
+                    out_pos += sprintf(output + out_pos, "%s", symbol_table[idx].str_value);
+                } else {
+                    out_pos += sprintf(output + out_pos, "%d", symbol_table[idx].value);
+                }
+            } else {
+                out_pos += sprintf(output + out_pos, "{undefined:%s}", trimmed);
+            }
+        } else if (str[i] == '\\' && str[i+1] == 'n') {
+            // Handle \n escape sequence
+            output[out_pos++] = '\n';
+            i += 2;
+        } else if (str[i] == '\\' && str[i+1] == 't') {
+            // Handle \t escape sequence
+            output[out_pos++] = '\t';
+            i += 2;
+        } else if (str[i] == '\\' && str[i+1] == '{') {
+            // Handle escaped brace \{
+            output[out_pos++] = '{';
+            i += 2;
+        } else if (str[i] == '\\' && str[i+1] == '}') {
+            // Handle escaped brace \}
+            output[out_pos++] = '}';
+            i += 2;
+        } else {
+            // Regular character
+            output[out_pos++] = str[i++];
+        }
+    }
+    output[out_pos] = '\0';
+    
+    printf("%s", output);
+    free(str);
+    str = NULL;
+}
+
+void println_fstring(char *format_str) {
+    print_fstring(format_str);
+    printf("\n");
 }

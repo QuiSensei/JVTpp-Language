@@ -14,6 +14,10 @@ typedef struct {
     char *str_value;
 } Symbol;
 
+/* ----- Utility Function Prototypes ----- */
+int division_check(int numerator, int denominator);
+char *strip_quotes(char *s);
+
 // FIXED: Declare global symbol table and counter
 extern Symbol symbol_table[MAX_SYMBOLS];
 extern int symbol_count;
@@ -25,8 +29,8 @@ void add_string_symbol(char *name, char *value);
 int get_symbol_value(char *name);
 char *get_symbol_string(char *name);
 
-/* ----- Utility Function Prototypes ----- */
-int division_check(int numerator, int denominator);
-char *strip_quotes(char *s);
+/* ----- printing Functions ----- */
+void print_fstring(char *format_str);
+void println_fstring(char *format_str);
 
 #endif
