@@ -1468,7 +1468,7 @@ yyreduce:
 /* Line 1455 of yacc.c  */
 #line 57 "JVTpp.y"
     {
-                    yyerror("Missing ']' after 'develop'");
+                    yyerror("Missing ']' before 'finish'");
                     yyerrok;
                 ;}
     break;
