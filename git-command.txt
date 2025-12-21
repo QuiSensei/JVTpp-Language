@@ -2,6 +2,9 @@
 git status
 # (This will typically say "Your branch is behind 'origin/main' by X commits, and can be fast-forwarded.")
 
+# Discard Changes to Tracked Files && Remove New (Untracked) Files
+git reset --hard HEAD && git clean -fd
+
 # Fetch all branches from the default remote (origin)
 git fetch origin
 
