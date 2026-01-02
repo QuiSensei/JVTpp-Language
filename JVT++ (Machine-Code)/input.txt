@@ -1,0 +1,25 @@
+develop[
+    ALPHA name1 = "Pedro";
+    ALPHA name2 = "Juan";
+    NUMERAL age1 = 20;
+    NUMERAL age2 = 20;
+    ALPHA p;
+    ALPHA s = "";
+    NUMERAL a = 2;
+    NUMERAL mult;
+
+    p = "CSC 112";
+    a = a * a;
+
+    showln("Name: {name1}");
+    showln("Name: %d", name2);
+    showln("subject: %s", p);
+    showln("subject: {p}");
+    showln("multiply: {a}");
+
+    p = "love";
+    showln("subject: {p}");
+    
+    a = 1;
+    showln("multiply: {a}");
+]finish
