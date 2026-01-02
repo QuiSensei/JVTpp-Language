@@ -8,7 +8,7 @@
 int main(int argc, char *argv[]) {
     // Check if a filename was provided as command-line argument
     if(argc < 2) {
-        fprintf(stderr, "Usage: %s <source_file>\n", argv[0]);
+        fprintf(stderr, "ERROR: %s <source_file>\n", argv[0]);
         fprintf(stderr, "ERROR: No input file specified.\n");
         return 1;
     }
@@ -21,9 +21,23 @@ int main(int argc, char *argv[]) {
     }
 
     // Convert the code (process and print converted code)
-    code_convertion(source_file);
+    char *converted_code = code_convertion(source_file);
+    if(converted_code == NULL) {
+        fprintf(stderr, "ERROR: Code conversion failed.\n");
+        free(source_file);
+        return 1;
+    }
+
+    // printf("%s", converted_code);
+
+    const char *output_filename = "assembly.asm";
+    // char output_filename[128] = "";                      // needed if dynamic naming is required
+
+    compile_to_assemble(converted_code, output_filename);
+
 
     // Clean up allocated memory
+    free(converted_code);
     free(source_file);
 
     return 0;

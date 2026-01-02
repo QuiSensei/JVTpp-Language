@@ -5,22 +5,11 @@
 #include "mips64.h"
 #include "functions.h"
 
-#define ESCAPE_SEQUENCE(c) ((c) == ' ' || (c) == '\n' || (c) == '\t' || (c) == '\r')
-#define ALPHABETIC_CHARACTER(c) (((c) >= 'a' && (c) <= 'z') || ((c) >= 'A' && (c) <= 'Z') || (c) == '_')
-#define DIGIT_CHARACTER(c) ((c) >= '0' && (c) <= '9')
-#define ALPHANUMERIC_CHARACTER(c) (ALPHABETIC_CHARACTER(c) || DIGIT_CHARACTER(c))
-
-// Maximum number of symbols (variables) that can be stored
-#define MAX_SYMBOLS 128
-
-// Global symbol table array to store all variables
 Symbol symbol_table[MAX_SYMBOLS];
 
-// Counter to track how many symbols are currently in the table
-size_t symbol_count = 0;
+size_t symbol_count;
 
-// Next available register for variable allocation (starts at r1, r0 is reserved)
-int next_available_register = 1;
+int next_available_register;
 
 char *open_source_file(const char *source_file) {
     FILE *source_code = fopen(source_file, "r");
@@ -106,19 +95,6 @@ void add_variable(const char *name, int value, int initialized) {
     
     // Increment the symbol counter
     symbol_count++;
-}
-
-/* 
- * ============================================
- * Function: is_operator
- * Purpose: Checks if a character is an arithmetic operator
- * Parameters: c - character to check
- * Returns: 1 (true) if operator, 0 (false) otherwise
- * ============================================
-*/
-int is_operator(char c) {
-    // Check for addition, subtraction, multiplication, or division
-    return (c == '+' || c == '-' || c == '*' || c == '/');
 }
 
 /* 
@@ -229,16 +205,17 @@ void skip_escape_sequences_and_comments(const char *source_code, int *i, int *li
     }
 }
 
-void code_convertion(const char *source_file) {
+char *code_convertion(const char *source_file) {
     const char *keywords[] = {"develop[", "]finish"};
     int numKeywords = 2;
 
     // Create a working copy to process
     size_t source_len = strlen(source_file);
+
     char *result = (char *)malloc(source_len + 1);
     if(result == NULL) {
         fprintf(stderr, "ERROR: Memory allocation failed in code conversion.\n");
-        return;
+        return NULL;
     }
     strcpy(result, source_file);
 
@@ -248,7 +225,7 @@ void code_convertion(const char *source_file) {
         if(temp == NULL) {
             fprintf(stderr, "ERROR: Memory allocation failed.\n");
             free(result);
-            return;
+            return NULL;
         }
         
         char *position;
@@ -267,7 +244,7 @@ void code_convertion(const char *source_file) {
     if(final == NULL) {
         fprintf(stderr, "ERROR: Memory allocation failed.\n");
         free(result);
-        return;
+        return NULL;
     }
     final[0] = '\0';
     
@@ -304,10 +281,9 @@ void code_convertion(const char *source_file) {
         }
     }
 
-    printf("%s", final);
-    
-    free(final);
     free(result);
+
+    return final;
 }
 
 char *dataype_convertion(const char *line) {
@@ -412,4 +388,85 @@ char *dataype_convertion(const char *line) {
     }
     
     return c_code;
+}
+
+void compile_to_assemble(const char *source_code, const char *file_name) {
+    // Open the output file for writing assembly code
+    FILE *output_file = fopen(file_name, "w");
+    if(output_file == NULL) {
+        // Print error if file creation fails
+        fprintf(stderr, "'%s' can't be created\n", file_name);
+        return;
+    }
+
+    // Write the .data section header (where variables are declared)
+    fprintf(output_file, ".data\n");
+    
+    /*
+     * Create a duplicate of the source code for processing
+     * This allows us to parse it multiple times without modifying the original
+    */
+    char *duplicated_source = strdup(source_code ? source_code : "");
+    if(duplicated_source == NULL) {
+        fprintf(stderr, "Memory allocation failed.\n");
+        fclose(output_file);
+        return;
+    }
+    
+    /* 
+     * ============================================
+     * FIRST PASS: Symbol Table Construction
+     * ============================================
+     * Scan through the source code to:
+     * - Collect all variable declarations
+     * - Build the symbol table
+     * - Check for syntax/semantic errors
+    */
+    if(syntax_analyzer(duplicated_source, NULL) != 0) {
+        // If errors were found, clean up and exit
+        free(duplicated_source);
+        fclose(output_file);
+        return;
+    }
+    
+    // Write all variable declarations to the .data section
+    for(size_t i = 0; i < symbol_count; i++) {
+        // Format: variable_name: .byte initial_value
+        fprintf(output_file, "\t%s:\t.byte %d\n", symbol_table[i].name, symbol_table[i].value);
+    }
+    
+    // Write the .code section header (where executable instructions go)
+    fprintf(output_file, ".code\n");
+    
+    // Write the main entry point label
+    fprintf(output_file, "main:\n");
+    
+    /*
+     * ============================================
+     * SECOND PASS: Code Generation
+     * ============================================
+     * Free the old duplicate and create a fresh copy of the source code
+     * This resets our position in the source for the second pass
+    */
+    free(duplicated_source);
+
+    duplicated_source = strdup(source_code ? source_code : "");
+    if(duplicated_source == NULL) {
+        fprintf(stderr, "Memory allocation failed.\n");
+        fclose(output_file);
+        return;
+    }
+    
+    // Process statements again, this time generating actual assembly code
+    // The output_file is passed so assembly instructions are written
+    if(syntax_analyzer(duplicated_source, output_file) != 0) {
+        // If errors occurred during code generation, clean up and exit
+        free(duplicated_source);
+        fclose(output_file);
+        return;
+    }
+
+    // Clean up: free allocated memory and close the output file
+    free(duplicated_source);
+    fclose(output_file);
 }

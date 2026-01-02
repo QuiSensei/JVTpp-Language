@@ -16,10 +16,12 @@ all: $(TARGET)
 
 # Compile and link all source files directly into executable (no .o files)
 $(TARGET): $(SOURCES) $(HEADERS)
+	@echo "Compiling JVT++ Machine code..."
 	$(CC) $(CFLAGS) -o $(TARGET) $(SOURCES)
 
 # Clean up compiled files
 clean:
+	@echo "Cleaning up..."
 	rm -f $(TARGET) $(TARGET).exe
 
 # Run the program (example usage)
