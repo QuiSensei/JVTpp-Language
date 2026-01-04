@@ -10,7 +10,7 @@ int main(int argc, char *argv[]) {
     if(argc < 2) {
         fprintf(stderr, "ERROR: %s <source_file>\n", argv[0]);
         fprintf(stderr, "ERROR: No input file specified.\n");
-        return 1;
+        return 1;  // ✓ NOW INSIDE the if block
     }
 
     // Open and read the source file
@@ -28,17 +28,19 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    // Optionally print converted code for debugging
     // printf("%s", converted_code);
 
     const char *output_filename = "assembly.asm";
-    // char output_filename[128] = "";                      // needed if dynamic naming is required
+    // char output_filename[128] = "";  // needed if dynamic naming is required
 
     compile_to_assemble(converted_code, output_filename);
-
 
     // Clean up allocated memory
     free(converted_code);
     free(source_file);
 
+    printf("Assembly code successfully generated: %s\n", output_filename);
+    
     return 0;
 }

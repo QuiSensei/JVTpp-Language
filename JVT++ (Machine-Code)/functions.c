@@ -6,10 +6,8 @@
 #include "functions.h"
 
 Symbol symbol_table[MAX_SYMBOLS];
-
 size_t symbol_count;
-
-int next_available_register;
+int next_available_register = 1;
 
 char *open_source_file(const char *source_file) {
     FILE *source_code = fopen(source_file, "r");
@@ -54,73 +52,58 @@ char *open_source_file(const char *source_file) {
     return lines_of_code;
 }
 
-/*
- * ============================================
- * Function: add_variable
- * Purpose: Adds a new variable to the symbol table with register allocation
- * Parameters:
- *          name - variable name
- *          value - initial value
- *          initialized - flag indicating if variable has been initialized (1) or not (0)
- * ============================================
-*/
-void add_variable(const char *name, int value, int initialized) {
-    // Check if symbol table is full
+void add_variable(const char *name, int value, const char *str_value, int data_type, int initialized) {
     if (symbol_count >= MAX_SYMBOLS) return;
 
-    // Search for existing variable with the same name
     for(size_t i = 0; i < symbol_count; i++) {
         if(strcmp(symbol_table[i].name, name) == 0) {
-            // Variable already exists - update its value and initialization status
             symbol_table[i].value = value;
             symbol_table[i].initialized = initialized;
+            symbol_table[i].data_type = data_type;
+            
+            if(str_value && (data_type == 1 || data_type == 2)) {
+                strncpy(symbol_table[i].str_value, str_value, 255);
+                symbol_table[i].str_value[255] = '\0';
+            }
             return;
         }
     }
 
-    // Variable doesn't exist - add new entry to symbol table
-    // Copy variable name (max 63 chars + null terminator)
     strncpy(symbol_table[symbol_count].name, name, 63);
-    symbol_table[symbol_count].name[63] = '\0';  // Ensure null termination
+    symbol_table[symbol_count].name[63] = '\0';
     
-    // Set variable properties
     symbol_table[symbol_count].value = value;
+    symbol_table[symbol_count].data_type = data_type;
     symbol_table[symbol_count].initialized = initialized;
-    symbol_table[symbol_count].mem_offset = symbol_count;  // Memory offset for assembly
+    symbol_table[symbol_count].mem_offset = symbol_count * 8;
     
-    // Allocate a register for this variable
+    if(str_value && (data_type == 1 || data_type == 2)) {
+        strncpy(symbol_table[symbol_count].str_value, str_value, 255);
+        symbol_table[symbol_count].str_value[255] = '\0';
+    } else {
+        symbol_table[symbol_count].str_value[0] = '\0';
+    }
+    
     symbol_table[symbol_count].reg_num = next_available_register;
-    symbol_table[symbol_count].in_register = 0;  // Initially not in register
+    symbol_table[symbol_count].in_register = 0;
     next_available_register++;
+    if(next_available_register > 25) next_available_register = 8;
     
-    // Increment the symbol counter
     symbol_count++;
 }
 
-/* 
- * ============================================
- * Function: find_symbol
- * Purpose: Searches for a variable in the symbol table by name
- * Parameters: name - variable name to search for
- * Returns: Pointer to Symbol if found, NULL if not found
- * ============================================
-*/
 Symbol *find_symbol(const char *name) {
-    // Linear search through symbol table
     for(size_t i = 0; i < symbol_count; i++) {
         if(strcmp(symbol_table[i].name, name) == 0) {
-            // Found the variable - return pointer to its symbol table entry
             return &symbol_table[i];
         }
     }
-    // Variable not found
     return NULL;
 }
 
 void white_space_trim(char *string) {
     if(!string) return;
     
-    // Remove leading whitespace
     char *first_non_space = string;
     while (*first_non_space && isspace((unsigned char)*first_non_space)) {
         first_non_space++;
@@ -130,7 +113,6 @@ void white_space_trim(char *string) {
         memmove(string, first_non_space, strlen(first_non_space) + 1);
     }
 
-    // Remove trailing whitespace
     char *last_char = string + strlen(string) - 1;
     while (last_char >= string && isspace((unsigned char)*last_char)) {
         *last_char = '\0';
@@ -138,67 +120,32 @@ void white_space_trim(char *string) {
     }
 }
 
-/*
- * ============================================
- * Function: skip_escape_sequences_and_comments
- * Purpose: Advances the position index past whitespace and comments
- * Parameters:
- *   source_code - the source code string
- *   i - pointer to current position index (modified)
- *   line - pointer to current line number (modified)
- * ============================================
-*/
 void skip_escape_sequences_and_comments(const char *source_code, int *i, int *line) {
-    // Continue looping until we hit non-whitespace, non-comment content
     while(source_code[*i] != '\0') {
-        
-        // ============================================
-        // CASE 1: Skip whitespace (space, newline, tab, carriage return)
-        // ============================================
         if(ESCAPE_SEQUENCE(source_code[*i])) {
-            // Track line numbers when encountering newlines
             if(source_code[*i] == '\n') {
                 (*line)++;
             }
             (*i)++;
         } 
-        
-        // ============================================
-        // CASE 2: Skip single-line comments (//)
-        // ============================================
         else if(source_code[*i] == '/' && source_code[(*i) + 1] == '/') {
-            // Skip everything until end of line or end of file
             while(source_code[*i] != '\0' && source_code[*i] != '\n') {
                 (*i)++;
             }
         } 
-        
-        // ============================================
-        // CASE 3: Skip multi-line comments (/* ... */)
-        // ============================================
         else if(source_code[*i] == '/' && source_code[(*i) + 1] == '*') {
-            // Skip the opening "/*"
             (*i) += 2;
-            
-            // Continue until we find the closing "*/" or reach end of file
             while(source_code[*i] != '\0' && 
                   !(source_code[*i] == '*' && source_code[(*i) + 1] == '/')) {
-                // Track line numbers within the comment block
                 if(source_code[*i] == '\n') {
                     (*line)++;
                 }
                 (*i)++;
             }
-            
-            // Skip the closing "*/" if we found it
             if(source_code[*i] != '\0') {
                 (*i) += 2;
             }
         } 
-        
-        // ============================================
-        // Found actual code - stop skipping
-        // ============================================
         else {
             break;
         }
@@ -209,7 +156,6 @@ char *code_convertion(const char *source_file) {
     const char *keywords[] = {"develop[", "]finish"};
     int numKeywords = 2;
 
-    // Create a working copy to process
     size_t source_len = strlen(source_file);
 
     char *result = (char *)malloc(source_len + 1);
@@ -219,9 +165,8 @@ char *code_convertion(const char *source_file) {
     }
     strcpy(result, source_file);
 
-    // Remove each keyword - use dynamic allocation for temp buffer
     for(int k = 0; k < numKeywords; k++) {
-        char *temp = (char *)malloc(source_len * 2 + 1); // Extra space for safety
+        char *temp = (char *)malloc(source_len * 2 + 1);
         if(temp == NULL) {
             fprintf(stderr, "ERROR: Memory allocation failed.\n");
             free(result);
@@ -238,9 +183,8 @@ char *code_convertion(const char *source_file) {
         free(temp);
     }
 
-    // Process line by line and remove leading whitespace using white_space_trim
     size_t result_len = strlen(result);
-    char *final = (char *)malloc(result_len * 2 + 1); // Extra space for converted lines
+    char *final = (char *)malloc(result_len * 2 + 1);
     if(final == NULL) {
         fprintf(stderr, "ERROR: Memory allocation failed.\n");
         free(result);
@@ -255,13 +199,9 @@ char *code_convertion(const char *source_file) {
     while(i <= len) {
         if(result[i] == '\n' || result[i] == '\0') {
             line[line_idx] = '\0';
-            
-            // Use white_space_trim to remove leading and trailing whitespace
             white_space_trim(line);
             
-            // Add the trimmed line
             if(strlen(line) > 0) {
-                // Convert the line using datatype_convertions logic
                 char *converted_line = dataype_convertion(line);
                 if(converted_line != NULL) {
                     strcat(final, converted_line);
@@ -274,7 +214,7 @@ char *code_convertion(const char *source_file) {
             line_idx = 0;
             i++;
         } else {
-            if(line_idx < 999) { // Prevent buffer overflow
+            if(line_idx < 999) {
                 line[line_idx++] = result[i];
             }
             i++;
@@ -282,7 +222,6 @@ char *code_convertion(const char *source_file) {
     }
 
     free(result);
-
     return final;
 }
 
@@ -290,7 +229,6 @@ char *dataype_convertion(const char *line) {
     static char c_code[1000];
     char line_copy[1000];
     
-    // Safely copy input line
     strncpy(line_copy, line, 999);
     line_copy[999] = '\0';
     
@@ -298,9 +236,7 @@ char *dataype_convertion(const char *line) {
     char variable[50] = "";
     char value[500] = "";
     
-    // Check if line contains a declaration with "="
     if(strstr(line_copy, "=") != NULL) {
-        // Parse the declaration: DATATYPE variable = value;
         char *token = strtok(line_copy, " ");
         if(token != NULL) {
             strncpy(datatype, token, 49);
@@ -313,15 +249,14 @@ char *dataype_convertion(const char *line) {
             variable[49] = '\0';
         }
         
-        token = strtok(NULL, " ");  // Skip "="
+        token = strtok(NULL, " ");
         if(token == NULL || strcmp(token, "=") != 0) {
-            // Invalid format
             strncpy(c_code, line, 999);
             c_code[999] = '\0';
             return c_code;
         }
         
-        token = strtok(NULL, ";");   // Get value (everything until semicolon)
+        token = strtok(NULL, ";");
         if(token != NULL) {
             while(*token == ' ') token++;
             strncpy(value, token, 499);
@@ -333,23 +268,19 @@ char *dataype_convertion(const char *line) {
             }
         }
         
-        // Convert datatype
         const char *c_datatype = NULL;
         if(strcmp(datatype, "NUMERAL") == 0) {
             c_datatype = "int";
+            snprintf(c_code, sizeof(c_code), "%s %s = %s;", c_datatype, variable, value);
         } else if(strcmp(datatype, "ALPHA") == 0) {
-            c_datatype = "char*";
-        } else if(strcmp(datatype, "DECIMAL") == 0) {
-            c_datatype = "float";
+            c_datatype = "char";
+            snprintf(c_code, sizeof(c_code), "%s %s[] = %s;", c_datatype, variable, value);
         } else {
             strncpy(c_code, line, 999);
             c_code[999] = '\0';
             return c_code;
         }
-        
-        snprintf(c_code, sizeof(c_code), "%s %s = %s;", c_datatype, variable, value);
     } else {
-        // Check for declaration without initialization (DATATYPE variable;)
         char *token = strtok(line_copy, " ");
         if(token != NULL) {
             strncpy(datatype, token, 49);
@@ -362,21 +293,20 @@ char *dataype_convertion(const char *line) {
             strncpy(variable, token, 49);
             variable[49] = '\0';
             
-            // Remove trailing spaces
+            char *bracket = strchr(variable, '[');
+            if(bracket) *bracket = '\0';
+
             int len = strlen(variable);
             while(len > 0 && variable[len-1] == ' ') {
                 variable[--len] = '\0';
             }
         }
         
-        // Convert datatype
         const char *c_datatype = NULL;
         if(strcmp(datatype, "NUMERAL") == 0) {
             c_datatype = "int";
         } else if(strcmp(datatype, "ALPHA") == 0) {
             c_datatype = "char";
-        } else if(strcmp(datatype, "DECIMAL") == 0) {
-            c_datatype = "float";
         }
         
         if(c_datatype != NULL) {
@@ -390,22 +320,37 @@ char *dataype_convertion(const char *line) {
     return c_code;
 }
 
+char *extract_string_literal(const char *str) {
+    static char buffer[256];
+    buffer[0] = '\0';
+    
+    if(!str) return buffer;
+    
+    const char *start = strchr(str, '"');
+    if(!start) return buffer;
+    
+    start++;
+    const char *end = strchr(start, '"');
+    if(!end) return buffer;
+    
+    int len = end - start;
+    if(len > 255) len = 255;
+    
+    strncpy(buffer, start, len);
+    buffer[len] = '\0';
+    
+    return buffer;
+}
+
 void compile_to_assemble(const char *source_code, const char *file_name) {
-    // Open the output file for writing assembly code
     FILE *output_file = fopen(file_name, "w");
     if(output_file == NULL) {
-        // Print error if file creation fails
         fprintf(stderr, "'%s' can't be created\n", file_name);
         return;
     }
 
-    // Write the .data section header (where variables are declared)
     fprintf(output_file, ".data\n");
     
-    /*
-     * Create a duplicate of the source code for processing
-     * This allows us to parse it multiple times without modifying the original
-    */
     char *duplicated_source = strdup(source_code ? source_code : "");
     if(duplicated_source == NULL) {
         fprintf(stderr, "Memory allocation failed.\n");
@@ -413,41 +358,23 @@ void compile_to_assemble(const char *source_code, const char *file_name) {
         return;
     }
     
-    /* 
-     * ============================================
-     * FIRST PASS: Symbol Table Construction
-     * ============================================
-     * Scan through the source code to:
-     * - Collect all variable declarations
-     * - Build the symbol table
-     * - Check for syntax/semantic errors
-    */
     if(syntax_analyzer(duplicated_source, NULL) != 0) {
-        // If errors were found, clean up and exit
         free(duplicated_source);
         fclose(output_file);
         return;
     }
     
-    // Write all variable declarations to the .data section
     for(size_t i = 0; i < symbol_count; i++) {
-        // Format: variable_name: .byte initial_value
-        fprintf(output_file, "\t%s:\t.byte %d\n", symbol_table[i].name, symbol_table[i].value);
+        if(symbol_table[i].data_type == 0) {
+            fprintf(output_file, "\t%s:\t.word %d\n", symbol_table[i].name, symbol_table[i].value);
+        } else if(symbol_table[i].data_type == 1 || symbol_table[i].data_type == 2) {
+            fprintf(output_file, "\t%s:\t.asciiz \"%s\"\n", symbol_table[i].name, symbol_table[i].str_value);
+        }
     }
     
-    // Write the .code section header (where executable instructions go)
-    fprintf(output_file, ".code\n");
-    
-    // Write the main entry point label
+    fprintf(output_file, ".text\n");
     fprintf(output_file, "main:\n");
     
-    /*
-     * ============================================
-     * SECOND PASS: Code Generation
-     * ============================================
-     * Free the old duplicate and create a fresh copy of the source code
-     * This resets our position in the source for the second pass
-    */
     free(duplicated_source);
 
     duplicated_source = strdup(source_code ? source_code : "");
@@ -457,16 +384,503 @@ void compile_to_assemble(const char *source_code, const char *file_name) {
         return;
     }
     
-    // Process statements again, this time generating actual assembly code
-    // The output_file is passed so assembly instructions are written
     if(syntax_analyzer(duplicated_source, output_file) != 0) {
-        // If errors occurred during code generation, clean up and exit
         free(duplicated_source);
         fclose(output_file);
         return;
     }
 
-    // Clean up: free allocated memory and close the output file
+    fprintf(output_file, "\n\tsyscall 0\n");
+
     free(duplicated_source);
     fclose(output_file);
+}
+
+int lexical_analyzer(const char *expr, FILE *output_file, int target_reg) {
+    if(!output_file) return -1;
+    
+    char tokens[64][64];
+    int token_count = 0;
+    int i = 0;
+    
+    while(expr[i] != '\0' && token_count < 64) {
+        while(isspace(expr[i])) i++;
+        if(expr[i] == '\0') break;
+        
+        if(ALPHABETIC_CHARACTER(expr[i])) {
+            int j = 0;
+            while(ALPHANUMERIC_CHARACTER(expr[i]) && j < 63) {
+                tokens[token_count][j++] = expr[i++];
+            }
+            tokens[token_count][j] = '\0';
+            token_count++;
+        } 
+        else if(DIGIT_CHARACTER(expr[i])) {
+            int j = 0;
+            while(DIGIT_CHARACTER(expr[i]) && j < 63) {
+                tokens[token_count][j++] = expr[i++];
+            }
+            tokens[token_count][j] = '\0';
+            token_count++;
+        } 
+        else if(OPERATOR_CHARACTER(expr[i])) {
+            tokens[token_count][0] = expr[i];
+            tokens[token_count][1] = '\0';
+            token_count++;
+            i++;
+        } 
+        else {
+            i++;
+        }
+    }
+    
+    if(token_count == 0) return -1;
+    
+    const char *r0_name = get_register_name(0);
+    
+    if(token_count == 1) {
+        if(DIGIT_CHARACTER(tokens[0][0])) {
+            const char *target_reg_name = get_register_name(target_reg);
+            fprintf(output_file, "\tdaddiu %s, %s, %s\n", target_reg_name, r0_name, tokens[0]);
+        } 
+        else {
+            Symbol *sym = find_symbol(tokens[0]);
+            if(sym && sym->reg_num >= 0) {
+                const char *target_reg_name = get_register_name(target_reg);
+                fprintf(output_file, "\tld %s, %s(%s)\n", target_reg_name, sym->name, r0_name);
+                return target_reg;
+            }
+        }
+        return target_reg;
+    }
+    
+    if(token_count == 3) {
+        int reg1 = target_reg + 10;
+        int reg2 = target_reg + 11;
+        
+        if(reg1 > 25) reg1 = 8;
+        if(reg2 > 25) reg2 = 9;
+        
+        if(DIGIT_CHARACTER(tokens[0][0])) {
+            const char *reg1_name = get_register_name(reg1);
+            fprintf(output_file, "\tdaddiu %s, %s, %s\n", reg1_name, r0_name, tokens[0]);
+        } else {
+            Symbol *sym = find_symbol(tokens[0]);
+            if(sym && sym->reg_num >= 0) {
+                const char *reg1_name = get_register_name(reg1);
+                fprintf(output_file, "\tld %s, %s(%s)\n", reg1_name, sym->name, r0_name);
+            }
+        }
+        
+        if(DIGIT_CHARACTER(tokens[2][0])) {
+            const char *reg2_name = get_register_name(reg2);
+            fprintf(output_file, "\tdaddiu %s, %s, %s\n", reg2_name, r0_name, tokens[2]);
+        } else {
+            Symbol *sym = find_symbol(tokens[2]);
+            if(sym && sym->reg_num >= 0) {
+                const char *reg2_name = get_register_name(reg2);
+                fprintf(output_file, "\tld %s, %s(%s)\n", reg2_name, sym->name, r0_name);
+            }
+        }
+        
+        const char *target_reg_name = get_register_name(target_reg);
+        const char *reg1_name = get_register_name(reg1);
+        const char *reg2_name = get_register_name(reg2);
+        
+        char op = tokens[1][0];
+        if(op == '+') {
+            fprintf(output_file, "\tdaddu %s, %s, %s\n", target_reg_name, reg1_name, reg2_name);
+        } else if(op == '-') {
+            fprintf(output_file, "\tdsubu %s, %s, %s\n", target_reg_name, reg1_name, reg2_name);
+        } else if(op == '*') {
+            fprintf(output_file, "\tdmult %s, %s\n", reg1_name, reg2_name);
+            fprintf(output_file, "\tmflo %s\n", target_reg_name);
+        } else if(op == '/') {
+            fprintf(output_file, "\tddiv %s, %s\n", reg1_name, reg2_name);
+            fprintf(output_file, "\tmflo %s\n", target_reg_name);
+        }
+        
+        return target_reg;
+    }
+    
+    int current_reg = target_reg;
+    
+    if(DIGIT_CHARACTER(tokens[0][0])) {
+        const char *current_reg_name = get_register_name(current_reg);
+        fprintf(output_file, "\tdaddiu %s, %s, %s\n", current_reg_name, r0_name, tokens[0]);
+    } else {
+        Symbol *sym = find_symbol(tokens[0]);
+        if(sym && sym->reg_num >= 0) {
+            const char *current_reg_name = get_register_name(current_reg);
+            fprintf(output_file, "\tld %s, %s(%s)\n", current_reg_name, sym->name, r0_name);
+        }
+    }
+    
+    for(int j = 1; j < token_count - 1; j += 2) {
+        char op = tokens[j][0];
+        char *next_operand = tokens[j + 1];
+        
+        int operand_reg = target_reg + 1;
+        if(operand_reg > 25) operand_reg = 9;
+        
+        if(DIGIT_CHARACTER(next_operand[0])) {
+            const char *operand_reg_name = get_register_name(operand_reg);
+            fprintf(output_file, "\tdaddiu %s, %s, %s\n", operand_reg_name, r0_name, next_operand);
+        } else {
+            Symbol *sym = find_symbol(next_operand);
+            if(sym && sym->reg_num >= 0) {
+                const char *operand_reg_name = get_register_name(operand_reg);
+                fprintf(output_file, "\tld %s, %s(%s)\n", operand_reg_name, sym->name, r0_name);
+            }
+        }
+        
+        const char *current_reg_name = get_register_name(current_reg);
+        const char *operand_reg_name = get_register_name(operand_reg);
+        
+        if(op == '+') {
+            fprintf(output_file, "\tdaddu %s, %s, %s\n", current_reg_name, current_reg_name, operand_reg_name);
+        } else if(op == '-') {
+            fprintf(output_file, "\tdsubu %s, %s, %s\n", current_reg_name, current_reg_name, operand_reg_name);
+        } else if(op == '*') {
+            fprintf(output_file, "\tdmult %s, %s\n", current_reg_name, operand_reg_name);
+            fprintf(output_file, "\tmflo %s\n", current_reg_name);
+        } else if(op == '/') {
+            fprintf(output_file, "\tddiv %s, %s\n", current_reg_name, operand_reg_name);
+            fprintf(output_file, "\tmflo %s\n", current_reg_name);
+        }
+    }
+    
+    return current_reg;
+}
+
+int syntax_analyzer(const char *source_code, FILE *output_file) {
+    int i = 0, line = 1;
+    int validation_i = 0;
+    int validation_line = 1;
+    
+    while (source_code[validation_i] != '\0') {
+        skip_escape_sequences_and_comments(source_code, &validation_i, &validation_line);
+        if(source_code[validation_i] == '\0') break;
+        
+        int line_start = validation_i;
+        int line_num = validation_line;
+        int has_content = 0;
+        
+        while(source_code[validation_i] != '\0' && 
+              source_code[validation_i] != '\n' && 
+              source_code[validation_i] != ';') {
+            if(!isspace((unsigned char)source_code[validation_i])) {
+                has_content = 1;
+            }
+            validation_i++;
+        }
+        
+        if(has_content && source_code[validation_i] != ';') {
+            fprintf(stderr, "\nMissing semicolon at line %d\n", line_num);
+            fprintf(stderr, "Line content: ");
+            
+            for(int j = line_start; source_code[j] != '\0' && source_code[j] != '\n'; j++) {
+                fputc(source_code[j], stderr);
+            }
+            fprintf(stderr, "\n");
+            exit(1);
+        }
+        
+        if(source_code[validation_i] == ';') {
+            validation_i++;
+        } else if(source_code[validation_i] == '\n') {
+            validation_line++;
+            validation_i++;
+        }
+    }
+    
+    while (source_code[i] != '\0') {
+        skip_escape_sequences_and_comments(source_code, &i, &line);
+        if(source_code[i] == '\0') break;
+
+        int start = i;
+        
+        while (source_code[i] != '\0' && source_code[i] != ';') {
+            if(source_code[i] == '\n') line++;
+            i++;
+        }
+        
+        if (i > start) {
+            int len = i - start;
+            
+            char *statement = (char *)malloc(len + 2);
+            if(statement) {
+                strncpy(statement, &source_code[start], len);
+                statement[len] = '\0';
+                
+                white_space_trim(statement);
+                
+                if (statement[0] != '\0' && statement[0] != ';') {
+                    make_assembly_for_statement(output_file, statement);
+                }
+                
+                free(statement);
+            }
+        }
+        
+        if (source_code[i] == ';') i++;
+    }
+    
+    return 0;
+}
+
+void make_assembly_for_statement(FILE *output_file, const char *statement) {
+    if (!statement) return;
+
+    char temp[512];
+    strncpy(temp, statement, sizeof(temp)-1);
+    temp[sizeof(temp)-1] = '\0';
+    white_space_trim(temp);
+
+    if (temp[0] == '\0') return;
+
+    if (strncmp(temp, "int ", 4) == 0) {
+        char var_name[64];
+        int value = 0;
+        int initialized = 0;
+
+        if (sscanf(temp + 4, "%63[^=;] = %d", var_name, &value) == 2) {
+            initialized = 1;
+            white_space_trim(var_name);
+            add_variable(var_name, value, NULL, 0, initialized);
+            
+            if(output_file) {
+                Symbol *sym = find_symbol(var_name);
+                if(sym) {
+                    const char *var_reg_name = get_register_name(sym->reg_num);
+                    const char *r0_name = get_register_name(0);
+                    fprintf(output_file, "\tdaddiu %s, %s, %d\n", var_reg_name, r0_name, value);
+                    fprintf(output_file, "\tsd %s, %s(%s)\n", var_reg_name, sym->name, r0_name);
+                    sym->in_register = 1;
+                }
+            }
+        }
+        else if (strchr(temp + 4, '=') != NULL) {
+            char rhs[256];
+            char *eq_pos = strchr(temp + 4, '=');
+            
+            int name_len = eq_pos - (temp + 4);
+            strncpy(var_name, temp + 4, name_len);
+            var_name[name_len] = '\0';
+            white_space_trim(var_name);
+            
+            strcpy(rhs, eq_pos + 1);
+            white_space_trim(rhs);
+            
+            add_variable(var_name, 0, NULL, 0, 0);
+            
+            if(output_file) {
+                char rhs_copy[256];
+                strncpy(rhs_copy, rhs, sizeof(rhs_copy)-1);
+                rhs_copy[sizeof(rhs_copy)-1] = '\0';
+                
+                int i = 0;
+                while(rhs_copy[i] != '\0') {
+                    while(isspace(rhs_copy[i])) i++;
+                    if(rhs_copy[i] == '\0') break;
+                    
+                    if(ALPHABETIC_CHARACTER(rhs_copy[i])) {
+                        char rhs_var_name[64];
+                        int j = 0;
+                        while(ALPHANUMERIC_CHARACTER(rhs_copy[i]) && j < 63) {
+                            rhs_var_name[j++] = rhs_copy[i++];
+                        }
+                        rhs_var_name[j] = '\0';
+                        
+                        Symbol *rhs_sym = find_symbol(rhs_var_name);
+                        if(!rhs_sym) {
+                            fprintf(stderr, "\nVariable '%s' used without declaration\n", rhs_var_name);
+                            fprintf(stderr, "Statement: %s\n", temp);
+                            exit(1);
+                        }
+                        if(rhs_sym->data_type != 0) {
+                            fprintf(stderr, "\nType error: Cannot assign char to int variable '%s'\n", var_name);
+                            fprintf(stderr, "Statement: %s\n", temp);
+                            exit(1);
+                        }
+                    } 
+                    else if(DIGIT_CHARACTER(rhs_copy[i])) {
+                        while(DIGIT_CHARACTER(rhs_copy[i])) i++;
+                    } 
+                    else if(OPERATOR_CHARACTER(rhs_copy[i])) {
+                        i++;
+                    } 
+                    else {
+                        i++;
+                    }
+                }
+                
+                Symbol *sym = find_symbol(var_name);
+                if(sym) {
+                    lexical_analyzer(rhs, output_file, sym->reg_num);
+                    
+                    const char *var_reg_name = get_register_name(sym->reg_num);
+                    const char *r0_name = get_register_name(0);
+                    
+                    fprintf(output_file, "\tsd %s, %s(%s)\n", var_reg_name, sym->name, r0_name);
+                    sym->in_register = 1;
+                    sym->initialized = 1;
+                }
+            }
+        }
+        else if (sscanf(temp + 4, "%63[^;]", var_name) == 1) {
+            white_space_trim(var_name);
+            add_variable(var_name, 0, NULL, 0, 0);
+            
+            if(output_file) {
+                Symbol *sym = find_symbol(var_name);
+                if(sym) {
+                    const char *var_reg_name = get_register_name(sym->reg_num);
+                    const char *r0_name = get_register_name(0);
+                    fprintf(output_file, "\tdaddiu %s, %s, 0\n", var_reg_name, r0_name);
+                    fprintf(output_file, "\tsd %s, %s(%s)\n", var_reg_name, sym->name, r0_name);
+                }
+            }
+        }
+        return;
+    }
+
+    if (strncmp(temp, "char", 4) == 0) {
+        char var_name[64];
+        char str_value[256] = "";
+        int is_pointer = 0;
+        int initialized = 0;
+        
+        char *ptr_check = temp + 4;
+        while(isspace(*ptr_check)) ptr_check++;
+        if(*ptr_check == '*') {
+            is_pointer = 1;
+            ptr_check++;
+        }
+        
+        if(strchr(temp, '=') != NULL && strchr(temp, '"') != NULL) {
+            char *eq_pos = strchr(temp, '=');
+            
+            char *name_start = is_pointer ? ptr_check : (temp + 4);
+            while(isspace(*name_start)) name_start++;
+            
+            int name_len = eq_pos - name_start;
+            strncpy(var_name, name_start, name_len);
+            var_name[name_len] = '\0';
+            white_space_trim(var_name);
+
+            char *bracket = strchr(var_name, '[');
+            if(bracket) *bracket = '\0';
+            
+            char *extracted = extract_string_literal(eq_pos + 1);
+            strncpy(str_value, extracted, 255);
+            str_value[255] = '\0';
+            
+            initialized = 1;
+            
+            int data_type = is_pointer ? 2 : 1;
+            add_variable(var_name, 0, str_value, data_type, initialized);
+        }
+        else {
+            char *name_start = is_pointer ? ptr_check : (temp + 4);
+            while(isspace(*name_start)) name_start++;
+            
+            sscanf(name_start, "%63[^;]", var_name);
+            white_space_trim(var_name);
+
+            char *bracket = strchr(var_name, '[');
+            if(bracket) *bracket = '\0';
+            
+            int data_type = is_pointer ? 2 : 1;
+            add_variable(var_name, 0, "", data_type, 0);
+        }
+        return;
+    }
+
+    char *eq_pos = strchr(temp, '=');
+    if(eq_pos != NULL) {
+        char lhs[64];
+        char rhs[256];
+        
+        int lhs_len = eq_pos - temp;
+        strncpy(lhs, temp, lhs_len);
+        lhs[lhs_len] = '\0';
+        white_space_trim(lhs);
+        
+        strcpy(rhs, eq_pos + 1);
+        white_space_trim(rhs);
+        
+        Symbol *sym = find_symbol(lhs);
+        if(!sym) {
+            fprintf(stderr, "\nVariable '%s' used without declaration\n", lhs);
+            fprintf(stderr, "Statement: %s\n", temp);
+            exit(1);
+        }
+        
+        if(sym->data_type == 0) {
+            char rhs_copy[256];
+            strncpy(rhs_copy, rhs, sizeof(rhs_copy)-1);
+            rhs_copy[sizeof(rhs_copy)-1] = '\0';
+            
+            int i = 0;
+            while(rhs_copy[i] != '\0') {
+                while(isspace(rhs_copy[i])) i++;
+                if(rhs_copy[i] == '\0') break;
+                
+                if(ALPHABETIC_CHARACTER(rhs_copy[i])) {
+                    char var_name[64];
+                    int j = 0;
+                    while(ALPHANUMERIC_CHARACTER(rhs_copy[i]) && j < 63) {
+                        var_name[j++] = rhs_copy[i++];
+                    }
+                    var_name[j] = '\0';
+                    
+                    Symbol *rhs_sym = find_symbol(var_name);
+                    if(!rhs_sym) {
+                        fprintf(stderr, "\nVariable '%s' used without declaration\n", var_name);
+                        fprintf(stderr, "Statement: %s\n", temp);
+                        exit(1);
+                    }
+                    if(rhs_sym->data_type != 0) {
+                        fprintf(stderr, "\nType error: Cannot assign char to int variable '%s'\n", lhs);
+                        fprintf(stderr, "Statement: %s\n", temp);
+                        exit(1);
+                    }
+                } 
+                else if(DIGIT_CHARACTER(rhs_copy[i])) {
+                    while(DIGIT_CHARACTER(rhs_copy[i])) i++;
+                } 
+                else if(OPERATOR_CHARACTER(rhs_copy[i])) {
+                    i++;
+                } 
+                else {
+                    i++;
+                }
+            }
+            
+            if(output_file) {
+                sym->initialized = 1;
+                lexical_analyzer(rhs, output_file, sym->reg_num);
+                
+                const char *var_reg_name = get_register_name(sym->reg_num);
+                const char *r0_name = get_register_name(0);
+                
+                fprintf(output_file, "\tsd %s, %s(%s)\n", var_reg_name, sym->name, r0_name);
+                sym->in_register = 1;
+            }
+        } 
+        else if(sym->data_type == 1 || sym->data_type == 2) {
+            if(strchr(rhs, '"') != NULL) {
+                char *extracted = extract_string_literal(rhs);
+                strncpy(sym->str_value, extracted, 255);
+                sym->str_value[255] = '\0';
+                sym->initialized = 1;
+            } else {
+                fprintf(stderr, "\nType error: Expected string literal for char variable '%s'\n", lhs);
+                fprintf(stderr, "Statement: %s\n", temp);
+                exit(1);
+            }
+        }
+        return;
+    }
 }

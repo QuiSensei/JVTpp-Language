@@ -1,15 +1,11 @@
 #ifndef FUNCTIONS_H
 #define FUNCTIONS_H
 
-/* 
- * Dangerous function-like macros
- * #define ESCAPE_SEQUENCE(c) ((c) == ' ' || (c) == '\n' || (c) == '\t' || (c) == '\r')
- * #define ALPHABETIC_CHARACTER(c) (((c) >= 'a' && (c) <= 'z') || ((c) >= 'A' && (c) <= 'Z') || (c) == '_')
- * #define DIGIT_CHARACTER(c) ((c) >= '0' && (c) <= '9')
- * #define ALPHANUMERIC_CHARACTER(c) (ALPHABETIC_CHARACTER(c) || DIGIT_CHARACTER(c))
-*/ 
+#include <stdio.h>
+#include <stddef.h>
+#include "mips64.h"
 
-// Safer version of function-like macros as static inline functions
+// Character classification helpers
 static inline int ESCAPE_SEQUENCE(int c) {
     return (c == ' ' || c == '\n' || c == '\t' || c == '\r');
 }
@@ -27,44 +23,47 @@ static inline int ALPHANUMERIC_CHARACTER(int c) {
 }
 
 static inline int OPERATOR_CHARACTER(int c) {
-    // Check for addition, subtraction, multiplication, or division
     return (c == '+' || c == '-' || c == '*' || c == '/');
 }
 
-// Maximum number of symbols (variables) that can be stored
 #define MAX_SYMBOLS 128
 
-// Structure to represent a variable/symbol in the symbol table
+// Variable symbol table entry
 typedef struct {
-    char name[64];          // Variable name (up to 63 characters + null terminator)
-    int  value;             // Variable's value
-    int  initialized;       // Flag: 1 if variable has been assigned a value, 0 otherwise
-    int  mem_offset;        // Memory offset for the variable (used in assembly generation)
-    int  reg_num;           // Allocated register number for this variable (-1 if not allocated)
-    int  in_register;       // Flag: 1 if current value is in register, 0 if needs to be loaded
+    char name[64];
+    int  value;
+    char str_value[256];
+    int  data_type;      // 0=int, 1=char, 2=char*
+    int  initialized;
+    int  mem_offset;
+    int  reg_num;        // -1 if not allocated
+    int  in_register;
 } Symbol;
 
-// Global symbol table array to store all variables
 extern Symbol symbol_table[MAX_SYMBOLS];
-
-// Counter to track how many symbols are currently in the table
 extern size_t symbol_count;
-
-// Next available register for variable allocation (starts at r1, r0 is reserved)
 extern int next_available_register;
 
-// Function prototypes
+// File operations
 char *open_source_file(const char *filename);
 
-void add_variable(const char *name, int value, int initialized);
+// Symbol table operations
+void add_variable(const char *name, int value, const char *str_value, int data_type, int initialized);
 Symbol *find_symbol(const char *name);
+
+// String utilities
 void white_space_trim(char *s);
-
 void skip_escape_sequences_and_comments(const char *source_code, int *i, int *line);
+char *extract_string_literal(const char *str);
 
+// Code conversion
 char *code_convertion(const char *source_file);
 char *dataype_convertion(const char *line);
 
+// Compilation stages
 void compile_to_assemble(const char *source_code, const char *file_name);
+int lexical_analyzer(const char *expr, FILE *output_file, int target_reg);
+int syntax_analyzer(const char *source_code, FILE *output_file);
+void make_assembly_for_statement(FILE *output_file, const char *statement);
 
 #endif

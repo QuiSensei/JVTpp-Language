@@ -3,10 +3,10 @@ CC = gcc
 CFLAGS = -Wall -g
 
 # Target executable name
-TARGET = sample
+TARGET = Machine-code
 
 # Source files
-SOURCES = Machine-code.c functions.c 
+SOURCES = Machine-code.c functions.c Registers.c I-type.c R-type.c
 
 # Header files (for dependency tracking)
 HEADERS = functions.h mips64.h
@@ -22,7 +22,7 @@ $(TARGET): $(SOURCES) $(HEADERS)
 # Clean up compiled files
 clean:
 	@echo "Cleaning up..."
-	rm -f $(TARGET) $(TARGET).exe
+	rm -f $(TARGET) $(TARGET).exe assembly.asm
 
 # Run the program (example usage)
 run: $(TARGET)
