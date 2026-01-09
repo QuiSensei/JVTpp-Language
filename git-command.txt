@@ -22,6 +22,11 @@ git add .
 
 or
 
+# Discard changes in a file (not staged)
+git restore <filename> or git restore .
+
+
+
 # To stage a specific file:
 git add <file_name>
 

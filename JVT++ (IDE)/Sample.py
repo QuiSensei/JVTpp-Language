@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import ttk, filedialog, messagebox
 import subprocess
 import os
 
@@ -13,6 +13,13 @@ COMPILER = os.path.join(
     "..",
     "JVT++ (Flex and Bison)",
     "jvtpp.exe"
+)
+
+MACHINE_CODE = os.path.join(
+    BASE_DIR,
+    "..",
+    "JVT++ (Machine-Code)",
+    "Machine-code.exe"
 )
 
 # ------------------------------------
@@ -58,6 +65,9 @@ class JVTppIDE(tk.Tk):
         self.create_menu()
         self.create_tabs()
         self.create_output()
+
+        # Bind F5 to run code
+        self.bind("<F5>", lambda event: self.run_code())
 
         self.new_tab()
 
@@ -153,6 +163,8 @@ class JVTppIDE(tk.Tk):
 
         with open(filename, "w") as f:
             f.write(text.get(1.0, tk.END))
+        
+        return True  # Indicate successful save
 
     # ---------- OUTPUT ----------
     def create_output(self):
@@ -166,18 +178,46 @@ class JVTppIDE(tk.Tk):
     def run_code(self):
         self.output.delete(1.0, tk.END)
 
+        # Check if compiler exists
         if not os.path.exists(COMPILER):
             self.output.insert(tk.END, "ERROR: jvtpp.exe not found\n")
             return
+        
+        # Check if machine code executable exists
+        if not os.path.exists(MACHINE_CODE):
+            self.output.insert(tk.END, "ERROR: Machine-code.exe not found\n")
+            return
 
-        text = self.current_text()
-        code = text.get(1.0, tk.END)
+        tab = self.current_tab()
+        filename = self.files.get(tab)
 
-        with open("temp.jvt", "w") as f:
-            f.write(code)
+        # Save the file first before running
+        if not filename:
+            # File hasn't been saved yet, prompt user to save
+            response = messagebox.askyesno(
+                "Save File",
+                "File needs to be saved before running. Save now?"
+            )
+            if response:
+                if not self.save_file():
+                    self.output.insert(tk.END, "ERROR: File not saved. Run cancelled.\n")
+                    return
+                filename = self.files.get(tab)
+            else:
+                self.output.insert(tk.END, "ERROR: File must be saved before running.\n")
+                return
+        else:
+            # File has been saved before, save current changes
+            if not self.save_file():
+                self.output.insert(tk.END, "ERROR: Could not save file.\n")
+                return
 
+        # Get the directory where the .jvt file is saved
+        file_dir = os.path.dirname(filename)
+
+        # Run the compiler with the saved file
         result = subprocess.run(
-            [COMPILER, "temp.jvt"],
+            [COMPILER, filename],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
@@ -185,6 +225,14 @@ class JVTppIDE(tk.Tk):
 
         self.output.insert(tk.END, result.stdout)
         self.output.insert(tk.END, result.stderr)
+
+        # Run Machine-code.exe in the background in the same directory as the .jvt file
+        subprocess.Popen(
+            [MACHINE_CODE],
+            cwd=file_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
 
 
 # ------------------------------------
